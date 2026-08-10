@@ -7,6 +7,7 @@ namespace SmolSearch.Storage;
 public sealed class CrawlFrontierStore
 {
     private readonly string _connectionString;
+    private const int MaxFrontierEntries = 50_000;
 
     internal CrawlFrontierStore(string connectionString)
     {
@@ -25,11 +26,11 @@ public sealed class CrawlFrontierStore
                 url,
                 discovered_at
             )
-            VALUES
-            (
+            SELECT
                 @Url,
                 @DiscoveredAt
-            );
+            WHERE
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
             """;
 
         var discoveredAt = DateTimeOffset.UtcNow.ToString(
@@ -43,7 +44,8 @@ public sealed class CrawlFrontierStore
             return new
             {
                 Url = uri.AbsoluteUri,
-                DiscoveredAt = discoveredAt
+                DiscoveredAt = discoveredAt,
+                MaxEntries = MaxFrontierEntries
             };
         }).ToList();
 
@@ -73,11 +75,11 @@ public sealed class CrawlFrontierStore
                 url,
                 discovered_at
             )
-            VALUES
-            (
+            SELECT
                 @Url,
                 @DiscoveredAt
-            );
+            WHERE
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
             """;
 
         await using var connection = new SqliteConnection(_connectionString);
@@ -89,7 +91,8 @@ public sealed class CrawlFrontierStore
                 Url = uri.AbsoluteUri,
                 DiscoveredAt = DateTimeOffset.UtcNow.ToString(
                     "O",
-                    CultureInfo.InvariantCulture)
+                    CultureInfo.InvariantCulture),
+                MaxEntries = MaxFrontierEntries
             });
     }
 
