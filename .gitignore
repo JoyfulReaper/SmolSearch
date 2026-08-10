@@ -3,6 +3,12 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# SmolSearch local SQLite database
+smolsearch.db
+smolsearch.db-wal
+smolsearch.db-shm
+smolsearch.db-journal
+
 # User-specific files
 *.rsuser
 *.suo
