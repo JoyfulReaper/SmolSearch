@@ -37,15 +37,20 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
 
         var results = await client.GetFromJsonAsync<SearchResult[]>(url, cancellationToken) ?? [];
 
+        var displayQuery = ToSingleLine(query);
+
         var gemtext = new StringBuilder();
         gemtext.AppendLine("# SmolSearch");
         gemtext.AppendLine();
-        gemtext.AppendLine($"## Results for: {query}");
+        gemtext.AppendLine($"## Results for: {displayQuery}");
         gemtext.AppendLine();
 
         foreach (var result in results)
         {
-            var title = string.IsNullOrWhiteSpace(result.Title) ? result.Url : result.Title;
+            var title = string.IsNullOrWhiteSpace(result.Title)
+                ? result.Url
+                : ToSingleLine(result.Title);
+
             gemtext.AppendLine($"=> {result.Url} {title}");
         }
 
@@ -57,5 +62,10 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
         await response.WriteTextAsync(
             gemtext.ToString().ReplaceLineEndings("\r\n"),
             cancellationToken);
+    }
+
+    private static string ToSingleLine(string value)
+    {
+        return value.Replace('\r', ' ').Replace('\n', ' ');
     }
 }
