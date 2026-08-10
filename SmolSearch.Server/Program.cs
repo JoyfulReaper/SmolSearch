@@ -28,6 +28,22 @@ app.MapGet("/api/search", async (string? q, int? limit) =>
         });
     }
 
+    if (q.Length > 256)
+    {
+        return Results.BadRequest(new
+        {
+            Error = "Query must be 256 characters or fewer."
+        });
+    }
+
+    if (q.Any(char.IsControl))
+    {
+        return Results.BadRequest(new
+        {
+            Error = "Query cannot contain control characters."
+        });
+    }
+
     var resultLimit = Math.Clamp(limit ?? 20, 1, 100);
     var results = await documents.SearchAsync(q, resultLimit);
 
