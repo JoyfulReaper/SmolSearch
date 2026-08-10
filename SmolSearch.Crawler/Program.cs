@@ -1,6 +1,8 @@
 ﻿using SmolSearch.Crawler.Gemini;
 using SmolSearch.Storage;
 
+const int maxPages = 10;
+
 var database = new SmolSearchDatabase("smolsearch.db");
 
 await database.InitializeAsync();
@@ -17,17 +19,67 @@ var client =
 var crawler =
     new GeminiCrawler(client, documents);
 
-var uri =
-    new Uri("gemini://geminiprotocol.net/");
+var queue = new Queue<Uri>();
+var seen = new HashSet<string>(
+    StringComparer.OrdinalIgnoreCase);
 
-var result =
-    await crawler.CrawlAsync(uri);
+queue.Enqueue(
+    new Uri("gemini://geminiprotocol.net/"));
 
-Console.WriteLine(
-    $"Indexed: {result?.Title ?? "(not indexed)"}");
+var crawled = 0;
 
-if (result is not null)
+while (queue.Count > 0 &&
+       crawled < maxPages)
 {
-    Console.WriteLine(
-        $"Discovered: {result.Links.Count} links");
+    var uri = queue.Dequeue();
+
+    if (!seen.Add(uri.AbsoluteUri))
+    {
+        continue;
+    }
+
+    Console.WriteLine($"Fetching: {uri}");
+
+    try
+    {
+        var result =
+            await crawler.CrawlAsync(uri);
+
+        crawled++;
+
+        if (result is null)
+        {
+            Console.WriteLine("  Not indexed");
+            continue;
+        }
+
+        Console.WriteLine(
+            $"  Indexed: {result.Title ?? "(no title)"}");
+
+        foreach (var link in result.Links)
+        {
+            if (!string.Equals(
+                    link.Scheme,
+                    "gemini",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!seen.Contains(link.AbsoluteUri))
+            {
+                queue.Enqueue(link);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"  Failed: {ex.GetType().Name}: {ex.Message}");
+    }
 }
+
+Console.WriteLine();
+Console.WriteLine($"Crawled: {crawled}");
+Console.WriteLine($"Discovered: {seen.Count + queue.Count}");
+Console.WriteLine($"Remaining queue: {queue.Count}");
