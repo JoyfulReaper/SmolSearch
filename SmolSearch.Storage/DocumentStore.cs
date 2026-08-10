@@ -55,4 +55,41 @@ public sealed class DocumentStore
             document.FetchedAt
         });
     }
+
+    public async Task<IReadOnlyList<SearchResult>> SearchAsync(
+        string query,
+        int limit = 20)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        const string sql =
+            """
+            SELECT
+                d.url AS Url,
+                d.title AS Title,
+                bm25(document_fts) AS Rank
+            FROM document_fts
+            JOIN documents d ON d.id = document_fts.rowid
+            WHERE document_fts MATCH @Query
+            ORDER BY Rank
+            LIMIT @Limit;
+            """;
+
+        await using var connection = new SqliteConnection(_connectionString);
+
+        var results = await connection.QueryAsync<SearchResult>(
+            sql,
+            new
+            {
+                Query = query,
+                Limit = limit
+            });
+
+        return results.AsList();
+    }
 }
