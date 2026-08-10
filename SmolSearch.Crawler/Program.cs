@@ -17,8 +17,21 @@ var response = await client.GetAsync(uri);
 Console.WriteLine(
     $"{response.StatusCode} {response.Meta}");
 
-if (response.Body is not null)
+if (response.Body is null)
 {
-    Console.WriteLine();
-    Console.WriteLine(response.Body);
+    return;
+}
+
+var parsed = GemtextParser.Parse(
+    uri,
+    response.Body);
+
+Console.WriteLine();
+Console.WriteLine($"Title: {parsed.Title ?? "(none)"}");
+Console.WriteLine($"Links: {parsed.Links.Count}");
+Console.WriteLine();
+
+foreach (var link in parsed.Links)
+{
+    Console.WriteLine(link);
 }
