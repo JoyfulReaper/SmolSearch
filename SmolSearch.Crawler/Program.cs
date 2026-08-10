@@ -20,11 +20,15 @@ var crawler =
     new GeminiCrawler(client, documents);
 
 var queue = new Queue<Uri>();
-var seen = new HashSet<string>(
-    StringComparer.OrdinalIgnoreCase);
 
-queue.Enqueue(
-    new Uri("gemini://geminiprotocol.net/"));
+var discovered = new HashSet<string>(
+    StringComparer.Ordinal);
+
+var seed =
+    new Uri("gemini://geminiprotocol.net/");
+
+discovered.Add(seed.AbsoluteUri);
+queue.Enqueue(seed);
 
 var crawled = 0;
 
@@ -32,11 +36,6 @@ while (queue.Count > 0 &&
        crawled < maxPages)
 {
     var uri = queue.Dequeue();
-
-    if (!seen.Add(uri.AbsoluteUri))
-    {
-        continue;
-    }
 
     Console.WriteLine($"Fetching: {uri}");
 
@@ -66,7 +65,7 @@ while (queue.Count > 0 &&
                 continue;
             }
 
-            if (!seen.Contains(link.AbsoluteUri))
+            if (discovered.Add(link.AbsoluteUri))
             {
                 queue.Enqueue(link);
             }
@@ -81,5 +80,5 @@ while (queue.Count > 0 &&
 
 Console.WriteLine();
 Console.WriteLine($"Crawled: {crawled}");
-Console.WriteLine($"Discovered: {seen.Count + queue.Count}");
+Console.WriteLine($"Discovered: {discovered.Count}");
 Console.WriteLine($"Remaining queue: {queue.Count}");
