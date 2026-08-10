@@ -9,6 +9,14 @@ var databasePath = Path.GetFullPath(
         ? "smolsearch.db"
         : configuredDatabasePath);
 
+
+if (!File.Exists(databasePath))
+{
+    throw new FileNotFoundException(
+        "SmolSearch database snapshot was not found.",
+        databasePath);
+}
+
 Console.WriteLine($"Database: {databasePath}");
 
 var database = new SmolSearchDatabase(databasePath);
