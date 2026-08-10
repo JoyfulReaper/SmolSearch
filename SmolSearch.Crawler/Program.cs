@@ -1,4 +1,5 @@
-﻿using SmolSearch.Crawler.Gemini;
+﻿using SmolSearch.Core;
+using SmolSearch.Crawler.Gemini;
 using SmolSearch.Storage;
 
 var database = new SmolSearchDatabase("smolsearch.db");
@@ -7,6 +8,9 @@ await database.InitializeAsync();
 
 var certificates =
     database.CreateGeminiCertificateStore();
+
+var documents =
+    database.CreateDocumentStore();
 
 var client = new GeminiClient(certificates);
 
@@ -26,12 +30,25 @@ var parsed = GemtextParser.Parse(
     uri,
     response.Body);
 
-Console.WriteLine();
-Console.WriteLine($"Title: {parsed.Title ?? "(none)"}");
-Console.WriteLine($"Links: {parsed.Links.Count}");
-Console.WriteLine();
-
-foreach (var link in parsed.Links)
+await documents.UpsertAsync(new SearchDocument
 {
-    Console.WriteLine(link);
+    Url = uri,
+    Title = parsed.Title,
+    Content = response.Body,
+    ContentType = response.Meta,
+    FetchedAt = DateTimeOffset.UtcNow
+});
+
+Console.WriteLine();
+Console.WriteLine($"Indexed: {parsed.Title ?? uri.ToString()}");
+
+var results = await documents.SearchAsync("Gemini");
+
+Console.WriteLine();
+Console.WriteLine("Search results:");
+
+foreach (var result in results)
+{
+    Console.WriteLine($"{result.Rank}: {result.Title}");
+    Console.WriteLine(result.Url);
 }
