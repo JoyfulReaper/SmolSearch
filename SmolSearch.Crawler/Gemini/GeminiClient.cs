@@ -1,6 +1,7 @@
 ﻿using SmolSearch.Core;
 using SmolSearch.Storage;
 using System.Globalization;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -123,13 +124,28 @@ public sealed class GeminiClient
 
         try
         {
+            var addresses = await Dns.GetHostAddressesAsync(
+                uri.Host,
+                requestToken);
+
+            var allowedAddresses = addresses
+                .Where(IsAllowedRemoteAddress)
+                .ToArray();
+
+            if (allowedAddresses.Length == 0)
+            {
+                throw new InvalidDataException(
+                    $"Gemini host resolves only to non-public addresses: {uri.Host}");
+            }
+
             using var tcpClient = new TcpClient();
 
-            await tcpClient.ConnectAsync(uri.Host, port, requestToken);
+            await tcpClient.ConnectAsync(
+                allowedAddresses,
+                port,
+                requestToken);
 
-            await using var sslStream = new SslStream(
-                tcpClient.GetStream(),
-                leaveInnerStreamOpen: false);
+            await using var sslStream = new SslStream(tcpClient.GetStream(), leaveInnerStreamOpen: false);
 
             await sslStream.AuthenticateAsClientAsync(
                 new SslClientAuthenticationOptions
@@ -306,4 +322,43 @@ public sealed class GeminiClient
         throw new InvalidDataException(
             "Gemini response header exceeds maximum length.");
     }
+    private static bool IsAllowedRemoteAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return false;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var bytes = address.GetAddressBytes();
+
+            return bytes[0] != 0 &&
+                   bytes[0] != 10 &&
+                   bytes[0] != 127 &&
+                   !(bytes[0] == 100 && bytes[1] is >= 64 and <= 127) &&
+                   !(bytes[0] == 169 && bytes[1] == 254) &&
+                   !(bytes[0] == 172 && bytes[1] is >= 16 and <= 31) &&
+                   !(bytes[0] == 192 && bytes[1] == 168) &&
+                   !(bytes[0] == 198 && bytes[1] is 18 or 19) &&
+                   bytes[0] < 224;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            return !address.Equals(IPAddress.IPv6Any) &&
+                   !address.IsIPv6LinkLocal &&
+                   !address.IsIPv6SiteLocal &&
+                   !address.IsIPv6UniqueLocal &&
+                   !address.IsIPv6Multicast;
+        }
+
+        return false;
+    }
+
 }
