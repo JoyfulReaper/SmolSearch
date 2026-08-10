@@ -161,10 +161,25 @@ public sealed class GeminiClient
                                 return false;
                             }
 
-                            var fingerprint = certificate.GetCertHashString(
-                                HashAlgorithmName.SHA256);
+                            using var certificate2 =
+                                X509CertificateLoader.LoadCertificate(
+                                    certificate.GetRawCertData());
 
                             var now = DateTimeOffset.UtcNow;
+
+                            var notBefore = new DateTimeOffset(
+                                certificate2.NotBefore.ToUniversalTime());
+
+                            var notAfter = new DateTimeOffset(
+                                certificate2.NotAfter.ToUniversalTime());
+
+                            if (now < notBefore || now > notAfter)
+                            {
+                                return false;
+                            }
+
+                            var fingerprint = certificate2.GetCertHashString(
+                                HashAlgorithmName.SHA256);
 
                             if (knownCertificate is not null &&
                                 knownCertificate.ExpiresAt > now)
@@ -175,17 +190,12 @@ public sealed class GeminiClient
                                     StringComparison.OrdinalIgnoreCase);
                             }
 
-                            using var certificate2 =
-                                X509CertificateLoader.LoadCertificate(
-                                    certificate.GetRawCertData());
-
                             newCertificate = new GeminiCertificatePin
                             {
                                 Host = uri.Host,
                                 Port = port,
                                 Fingerprint = fingerprint,
-                                ExpiresAt = new DateTimeOffset(
-                                    certificate2.NotAfter.ToUniversalTime())
+                                ExpiresAt = notAfter
                             };
 
                             return true;
