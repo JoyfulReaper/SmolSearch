@@ -1,5 +1,4 @@
 ﻿using HappyGemini.Extensibility;
-using Microsoft.Extensions.Configuration;
 using SmolSearch.Core;
 using System.Net.Http.Json;
 using System.Text;
@@ -7,10 +6,9 @@ using System.Text;
 namespace SmolSearch.HappyGemini;
 
 [AutoRegisterGeminiPage]
-public sealed class SearchPage(
-    IHttpClientFactory httpClientFactory,
-    IConfiguration configuration) : IHostScopedGeminiPage
+public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScopedGeminiPage
 {
+    private readonly SmolSearchPluginOptions _options = SmolSearchPluginOptions.Load();
     public string Path => "/search";
 
     public IReadOnlyCollection<string> Hostnames { get; } =
@@ -32,12 +30,7 @@ public sealed class SearchPage(
         }
 
         var query = Uri.UnescapeDataString(request.Url.Query[1..]);
-        var baseUrl = configuration["SmolSearch:BaseUrl"];
-
-        if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            throw new InvalidOperationException("SmolSearch:BaseUrl is not configured.");
-        }
+        var baseUrl = _options.BaseUrl;
 
         var client = httpClientFactory.CreateClient();
         var url = $"{baseUrl.TrimEnd('/')}/api/search?q={Uri.EscapeDataString(query)}";

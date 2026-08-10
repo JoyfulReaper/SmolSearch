@@ -8,17 +8,9 @@
   </PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="HappyGemini.Extensibility"
-						  Version="0.0.1"
-						  ExcludeAssets="runtime" />
+		<PackageReference Include="HappyGemini.Extensibility" Version="0.0.1" ExcludeAssets="runtime" />
 
-		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"
-						  Version="10.0.10"
-						  ExcludeAssets="runtime" />
-
-		<PackageReference Include="Microsoft.Extensions.Http"
-						  Version="10.0.10"
-						  ExcludeAssets="runtime" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" ExcludeAssets="runtime" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -28,6 +20,9 @@
 	<ItemGroup>
 		<None Update="happygemini.plugin.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="smolsearch.json">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
 
