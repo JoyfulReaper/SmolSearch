@@ -52,6 +52,13 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
                 : ToSingleLine(result.Title);
 
             gemtext.AppendLine($"=> {result.Url} {title}");
+
+            if (!string.IsNullOrWhiteSpace(result.Snippet))
+            {
+                gemtext.AppendLine($"> {ToSingleLine(result.Snippet)}");
+            }
+
+            gemtext.AppendLine();
         }
 
         await response.WriteHeaderAsync(
