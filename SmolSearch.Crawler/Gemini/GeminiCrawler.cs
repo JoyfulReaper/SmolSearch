@@ -38,13 +38,11 @@ public sealed class GeminiCrawler
             return null;
         }
 
-        var parsed = GemtextParser.Parse(
-            uri,
-            response.Body);
+        var parsed = GemtextParser.Parse(response.Uri, response.Body);
 
         await _documents.UpsertAsync(new SearchDocument
         {
-            Url = uri,
+            Url = response.Uri,
             Title = parsed.Title,
             Content = response.Body,
             ContentType = response.Meta,

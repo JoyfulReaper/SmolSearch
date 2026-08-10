@@ -15,9 +15,10 @@ public sealed class GeminiClient
     private const int DefaultPort = 1965;
     private const int MaxRequestLength = 1024;
     private const int MaxMetaLength = 1024;
+    private const int MaxBodyLength = 1_048_576;
+    private const int MaxRedirects = 5;
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
-    private const int MaxBodyLength = 1_048_576;
 
     private readonly GeminiCertificateStore _certificateStore;
 
@@ -34,11 +35,48 @@ public sealed class GeminiClient
     {
         ArgumentNullException.ThrowIfNull(uri);
 
-        using var timeoutSource =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(RequestTimeout);
+        var currentUri = uri;
 
-        var requestToken = timeoutSource.Token;
+        for (var redirectCount = 0; redirectCount <= MaxRedirects; redirectCount++)
+        {
+            var response = await SendAsync(currentUri, cancellationToken);
+
+            if (response.StatusCode is < 30 or >= 40)
+            {
+                return response;
+            }
+
+            if (redirectCount == MaxRedirects)
+            {
+                throw new InvalidDataException("Gemini redirect limit exceeded.");
+            }
+
+            if (!Uri.TryCreate(currentUri, response.Meta, out var redirectUri))
+            {
+                throw new InvalidDataException(
+                    $"Gemini server returned invalid redirect URI: {response.Meta}");
+            }
+
+            if (!string.Equals(
+                    redirectUri.Scheme,
+                    "gemini",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    $"Gemini redirect uses unsupported scheme: {redirectUri.Scheme}");
+            }
+
+            currentUri = redirectUri;
+        }
+
+        throw new InvalidOperationException("Unreachable.");
+    }
+
+    private async Task<GeminiResponse> SendAsync(
+        Uri uri,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
 
         if (!uri.IsAbsoluteUri ||
             !string.Equals(uri.Scheme, "gemini", StringComparison.OrdinalIgnoreCase))
@@ -71,164 +109,160 @@ public sealed class GeminiClient
                 nameof(uri));
         }
 
-        var port = uri.Port < 0
-            ? DefaultPort
-            : uri.Port;
+        var port = uri.Port < 0 ? DefaultPort : uri.Port;
 
-        var knownCertificate = await _certificateStore.GetAsync(
-            uri.Host,
-            port);
-
+        var knownCertificate = await _certificateStore.GetAsync(uri.Host, port);
         GeminiCertificatePin? newCertificate = null;
 
-        using var tcpClient = new TcpClient();
+        using var timeoutSource =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        await tcpClient.ConnectAsync(
-            uri.Host,
-            port,
-            requestToken);
+        timeoutSource.CancelAfter(RequestTimeout);
 
-        await using var sslStream = new SslStream(
-            tcpClient.GetStream(),
-            leaveInnerStreamOpen: false);
+        var requestToken = timeoutSource.Token;
 
-        await sslStream.AuthenticateAsClientAsync(
-            new SslClientAuthenticationOptions
-            {
-                TargetHost = uri.Host,
-                EnabledSslProtocols =
-                    SslProtocols.Tls12 |
-                    SslProtocols.Tls13,
-
-                RemoteCertificateValidationCallback =
-                    (_, certificate, _, _) =>
-                    {
-                        if (certificate is null)
-                        {
-                            return false;
-                        }
-
-                        var fingerprint = certificate.GetCertHashString(
-                            HashAlgorithmName.SHA256);
-
-                        var now = DateTimeOffset.UtcNow;
-
-                        if (knownCertificate is not null &&
-                            knownCertificate.ExpiresAt > now)
-                        {
-                            return string.Equals(
-                                knownCertificate.Fingerprint,
-                                fingerprint,
-                                StringComparison.OrdinalIgnoreCase);
-                        }
-
-                        using var certificate2 =
-                            X509CertificateLoader.LoadCertificate(
-                                certificate.GetRawCertData());
-
-                        newCertificate = new GeminiCertificatePin
-                        {
-                            Host = uri.Host,
-                            Port = port,
-                            Fingerprint = fingerprint,
-                            ExpiresAt = new DateTimeOffset(
-                                certificate2.NotAfter.ToUniversalTime())
-                        };
-
-                        return true;
-                    }
-            },
-            requestToken);
-
-        if (newCertificate is not null)
+        try
         {
-            await _certificateStore.UpsertAsync(newCertificate);
-        }
+            using var tcpClient = new TcpClient();
 
-        var requestBytes = Encoding.UTF8.GetBytes(
-            $"{request}\r\n");
+            await tcpClient.ConnectAsync(uri.Host, port, requestToken);
 
-        await sslStream.WriteAsync(
-            requestBytes,
-            requestToken);
+            await using var sslStream = new SslStream(
+                tcpClient.GetStream(),
+                leaveInnerStreamOpen: false);
 
-        await sslStream.FlushAsync(requestToken);
-
-        using var reader = new StreamReader(
-            sslStream,
-            new UTF8Encoding(false, true),
-            detectEncodingFromByteOrderMarks: false,
-            bufferSize: 1024,
-            leaveOpen: true);
-
-        var header = await reader.ReadLineAsync(requestToken)
-            ?? throw new InvalidDataException(
-                "Gemini server returned no response header.");
-
-        if (header.Length < 3 ||
-            header[2] != ' ' ||
-            !int.TryParse(
-                header.AsSpan(0, 2),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var statusCode))
-        {
-            throw new InvalidDataException(
-                "Gemini server returned an invalid response header.");
-        }
-
-        var meta = header[3..];
-
-        if (Encoding.UTF8.GetByteCount(meta) > MaxMetaLength)
-        {
-            throw new InvalidDataException(
-                "Gemini response meta exceeds 1024 bytes.");
-        }
-
-        string? body = null;
-
-        var isSuccess = statusCode is >= 20 and < 30;
-
-        var isText =
-            string.IsNullOrEmpty(meta) ||
-            meta.StartsWith(
-                "text/",
-                StringComparison.OrdinalIgnoreCase);
-
-        if (isSuccess && isText)
-        {
-            var builder = new StringBuilder();
-            var buffer = new char[8192];
-
-            while (true)
-            {
-                var read = await reader.ReadAsync(
-                    buffer,
-                    requestToken);
-
-                if (read == 0)
+            await sslStream.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions
                 {
-                    break;
-                }
+                    TargetHost = uri.Host,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
 
-                if (builder.Length + read > MaxBodyLength)
-                {
-                    throw new InvalidDataException(
-                        "Gemini response body exceeds maximum size.");
-                }
+                    RemoteCertificateValidationCallback =
+                        (_, certificate, _, _) =>
+                        {
+                            if (certificate is null)
+                            {
+                                return false;
+                            }
 
-                builder.Append(
-                    buffer,
-                    0,
-                    read);
+                            var fingerprint = certificate.GetCertHashString(
+                                HashAlgorithmName.SHA256);
+
+                            var now = DateTimeOffset.UtcNow;
+
+                            if (knownCertificate is not null &&
+                                knownCertificate.ExpiresAt > now)
+                            {
+                                return string.Equals(
+                                    knownCertificate.Fingerprint,
+                                    fingerprint,
+                                    StringComparison.OrdinalIgnoreCase);
+                            }
+
+                            using var certificate2 =
+                                X509CertificateLoader.LoadCertificate(
+                                    certificate.GetRawCertData());
+
+                            newCertificate = new GeminiCertificatePin
+                            {
+                                Host = uri.Host,
+                                Port = port,
+                                Fingerprint = fingerprint,
+                                ExpiresAt = new DateTimeOffset(
+                                    certificate2.NotAfter.ToUniversalTime())
+                            };
+
+                            return true;
+                        }
+                },
+                requestToken);
+
+            if (newCertificate is not null)
+            {
+                await _certificateStore.UpsertAsync(newCertificate);
             }
 
-            body = builder.ToString();
-        }
+            var requestBytes = Encoding.UTF8.GetBytes($"{request}\r\n");
 
-        return new GeminiResponse(
-            statusCode,
-            meta,
-            body);
+            await sslStream.WriteAsync(requestBytes, requestToken);
+            await sslStream.FlushAsync(requestToken);
+
+            using var reader = new StreamReader(
+                sslStream,
+                new UTF8Encoding(false, false),
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: 1024,
+                leaveOpen: true);
+
+            var header = await reader.ReadLineAsync(requestToken)
+                ?? throw new InvalidDataException(
+                    "Gemini server returned no response header.");
+
+            if (header.Length < 3 ||
+                header[2] != ' ' ||
+                !int.TryParse(
+                    header.AsSpan(0, 2),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var statusCode))
+            {
+                throw new InvalidDataException(
+                    "Gemini server returned an invalid response header.");
+            }
+
+            var meta = header[3..];
+
+            if (Encoding.UTF8.GetByteCount(meta) > MaxMetaLength)
+            {
+                throw new InvalidDataException(
+                    "Gemini response meta exceeds 1024 bytes.");
+            }
+
+            string? body = null;
+
+            var isSuccess = statusCode is >= 20 and < 30;
+            var isText =
+                string.IsNullOrEmpty(meta) ||
+                meta.StartsWith("text/", StringComparison.OrdinalIgnoreCase);
+
+            if (isSuccess && isText)
+            {
+                var builder = new StringBuilder();
+                var buffer = new char[8192];
+
+                while (true)
+                {
+                    var read = await reader.ReadAsync(buffer, requestToken);
+
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    if (builder.Length + read > MaxBodyLength)
+                    {
+                        throw new InvalidDataException(
+                            "Gemini response body exceeds maximum size.");
+                    }
+
+                    builder.Append(buffer, 0, read);
+                }
+
+                body = builder.ToString();
+            }
+
+            return new GeminiResponse(
+                uri,
+                statusCode,
+                meta,
+                body);
+        }
+        catch (OperationCanceledException) when (
+            timeoutSource.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Gemini request timed out: {uri}");
+        }
     }
 }
