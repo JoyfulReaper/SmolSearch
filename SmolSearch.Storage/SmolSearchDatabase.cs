@@ -23,6 +23,11 @@ public sealed class SmolSearchDatabase
         return new DocumentStore(_connectionString);
     }
 
+    public GeminiCertificateStore CreateGeminiCertificateStore()
+    {
+        return new GeminiCertificateStore(_connectionString);
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
@@ -74,6 +79,16 @@ public sealed class SmolSearchDatabase
                 INSERT INTO document_fts(rowid, title, content, url)
                 VALUES (new.id, new.title, new.content, new.url);
             END;
+
+            CREATE TABLE IF NOT EXISTS gemini_certificates
+            (
+                host        TEXT NOT NULL,
+                port        INTEGER NOT NULL,
+                fingerprint TEXT NOT NULL,
+                expires_at  TEXT NOT NULL,
+
+                PRIMARY KEY (host, port)
+            );
             """;
 
         await connection.ExecuteAsync(

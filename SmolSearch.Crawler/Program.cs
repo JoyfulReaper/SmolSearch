@@ -1,34 +1,15 @@
-﻿using SmolSearch.Core;
-using SmolSearch.Storage;
+﻿using SmolSearch.Crawler.Gemini;
 
-var database = new SmolSearchDatabase("smolsearch.db");
+var client = new GeminiClient();
 
-await database.InitializeAsync();
+var uri = new Uri("gemini://geminiprotocol.net/");
 
-var documents = database.CreateDocumentStore();
+var response = await client.GetAsync(uri);
 
-await documents.UpsertAsync(new SearchDocument
+Console.WriteLine($"{response.StatusCode} {response.Meta}");
+
+if (response.Body is not null)
 {
-    Url = new Uri("gemini://example.org/freebsd.gmi"),
-    Title = "Running Gemini on FreeBSD",
-    Content = "Notes about running a Gemini capsule on FreeBSD using jails.",
-    ContentType = "text/gemini",
-    FetchedAt = DateTimeOffset.UtcNow
-});
-
-await documents.UpsertAsync(new SearchDocument
-{
-    Url = new Uri("gemini://example.org/linux.gmi"),
-    Title = "Linux Server Notes",
-    Content = "Various notes about running services on Linux.",
-    ContentType = "text/gemini",
-    FetchedAt = DateTimeOffset.UtcNow
-});
-
-var results = await documents.SearchAsync("freebsd");
-
-foreach (var result in results)
-{
-    Console.WriteLine($"{result.Rank}: {result.Title}");
-    Console.WriteLine(result.Url);
+    Console.WriteLine();
+    Console.WriteLine(response.Body);
 }
