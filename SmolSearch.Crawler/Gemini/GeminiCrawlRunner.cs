@@ -1,15 +1,21 @@
-﻿namespace SmolSearch.Crawler.Gemini;
+﻿using SmolSearch.Storage;
+
+namespace SmolSearch.Crawler.Gemini;
 
 public sealed class GeminiCrawlRunner
 {
     private static readonly TimeSpan RequestDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly GeminiCrawler _crawler;
+    private readonly CrawlFrontierStore _frontier;
 
-    public GeminiCrawlRunner(GeminiCrawler crawler)
+    public GeminiCrawlRunner(GeminiCrawler crawler, CrawlFrontierStore frontier)
     {
         ArgumentNullException.ThrowIfNull(crawler);
+        ArgumentNullException.ThrowIfNull(frontier);
+
         _crawler = crawler;
+        _frontier = frontier;
     }
 
     public async Task<GeminiCrawlSummary> RunAsync(
@@ -24,20 +30,23 @@ public sealed class GeminiCrawlRunner
             throw new ArgumentOutOfRangeException(nameof(maxPages));
         }
 
-        var queue = new Queue<Uri>();
-        var discovered = new HashSet<string>(StringComparer.Ordinal);
-
-        discovered.Add(seed.AbsoluteUri);
-        queue.Enqueue(seed);
+        await _frontier.AddAsync(seed);
 
         var attempted = 0;
         var indexed = 0;
 
-        while (queue.Count > 0 && attempted < maxPages)
+        while (attempted < maxPages)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var uri = queue.Dequeue();
+            var pending = await _frontier.GetPendingAsync(1);
+
+            if (pending.Count == 0)
+            {
+                break;
+            }
+
+            var uri = pending[0];
             attempted++;
 
             Console.WriteLine($"Fetching: {uri}");
@@ -56,18 +65,15 @@ public sealed class GeminiCrawlRunner
 
                 Console.WriteLine($"  Indexed: {result.Title ?? "(no title)"}");
 
-                foreach (var link in result.Links)
-                {
-                    if (!string.Equals(link.Scheme, "gemini", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
+                var links = result.Links
+                    .Where(link => string.Equals(
+                        link.Scheme,
+                        "gemini",
+                        StringComparison.OrdinalIgnoreCase))
+                    .DistinctBy(link => link.AbsoluteUri, StringComparer.Ordinal)
+                    .ToList();
 
-                    if (discovered.Add(link.AbsoluteUri))
-                    {
-                        queue.Enqueue(link);
-                    }
-                }
+                await _frontier.AddRangeAsync(links);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -79,6 +85,11 @@ public sealed class GeminiCrawlRunner
             }
             finally
             {
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    await _frontier.MarkAttemptedAsync(uri);
+                }
+
                 await Task.Delay(RequestDelay, cancellationToken);
             }
         }
@@ -87,8 +98,8 @@ public sealed class GeminiCrawlRunner
         {
             Attempted = attempted,
             Indexed = indexed,
-            Discovered = discovered.Count,
-            Remaining = queue.Count
+            Discovered = await _frontier.CountAsync(),
+            Remaining = await _frontier.CountPendingAsync()
         };
     }
 }

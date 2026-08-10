@@ -8,10 +8,11 @@ await database.InitializeAsync();
 
 var certificates = database.CreateGeminiCertificateStore();
 var documents = database.CreateDocumentStore();
+var frontier = database.CreateCrawlFrontierStore();
 
 var client = new GeminiClient(certificates);
 var crawler = new GeminiCrawler(client, documents);
-var runner = new GeminiCrawlRunner(crawler);
+var runner = new GeminiCrawlRunner(crawler, frontier);
 
 var seed = new Uri("gemini://geminiprotocol.net/");
 

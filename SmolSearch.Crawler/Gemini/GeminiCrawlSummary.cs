@@ -4,6 +4,6 @@ public sealed record GeminiCrawlSummary
 {
     public int Attempted { get; init; }
     public int Indexed { get; init; }
-    public int Discovered { get; init; }
-    public int Remaining { get; init; }
+    public long Discovered { get; init; }
+    public long Remaining { get; init; }
 }

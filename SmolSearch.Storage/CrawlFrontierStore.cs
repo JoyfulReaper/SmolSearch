@@ -141,4 +141,27 @@ public sealed class CrawlFrontierStore
                     CultureInfo.InvariantCulture)
             });
     }
+
+    public async Task<long> CountAsync()
+    {
+        const string sql = "SELECT COUNT(*) FROM crawl_frontier;";
+
+        await using var connection = new SqliteConnection(_connectionString);
+
+        return await connection.ExecuteScalarAsync<long>(sql);
+    }
+
+    public async Task<long> CountPendingAsync()
+    {
+        const string sql =
+            """
+            SELECT COUNT(*)
+            FROM crawl_frontier
+            WHERE attempted_at IS NULL;
+            """;
+
+        await using var connection = new SqliteConnection(_connectionString);
+
+        return await connection.ExecuteScalarAsync<long>(sql);
+    }
 }
