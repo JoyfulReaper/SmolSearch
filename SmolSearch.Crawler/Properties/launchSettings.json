@@ -2,7 +2,7 @@
   "profiles": {
     "SmolSearch.Crawler": {
       "commandName": "Project",
-      "commandLineArgs": "100"
+      "commandLineArgs": "1000 C:\\SmolSearchData\\smolsearch-poc-2026-08-10.db"
     }
   }
 }
