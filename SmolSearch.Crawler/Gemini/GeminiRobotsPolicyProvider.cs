@@ -38,9 +38,20 @@ public sealed class GeminiRobotsPolicyProvider
             _cache[key] = policy;
         }
 
-        // null means we could not determine the site's policy.
-        // Fail closed for this crawl.
-        return policy is not null && policy.IsAllowed(uri);
+        if (policy is null)
+        {
+            Console.WriteLine($"  Robots policy unavailable; skipping: {uri}");
+            return false;
+        }
+
+        var allowed = policy.IsAllowed(uri);
+
+        if (!allowed)
+        {
+            Console.WriteLine($"  Rejected by robots.txt: {uri}");
+        }
+
+        return allowed;
     }
 
     private async Task<GeminiRobotsPolicy?> LoadAsync(
