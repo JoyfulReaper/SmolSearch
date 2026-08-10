@@ -7,14 +7,18 @@ public sealed class SmolSearchDatabase
 {
     private readonly string _connectionString;
 
-    public SmolSearchDatabase(string databasePath)
+    public SmolSearchDatabase(
+        string databasePath,
+        bool readOnly = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
 
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate
+            Mode = readOnly
+                ? SqliteOpenMode.ReadOnly
+                : SqliteOpenMode.ReadWriteCreate
         }.ToString();
     }
 

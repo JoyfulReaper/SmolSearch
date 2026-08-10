@@ -9,7 +9,6 @@ var databasePath = Path.GetFullPath(
         ? "smolsearch.db"
         : configuredDatabasePath);
 
-
 if (!File.Exists(databasePath))
 {
     throw new FileNotFoundException(
@@ -19,8 +18,9 @@ if (!File.Exists(databasePath))
 
 Console.WriteLine($"Database: {databasePath}");
 
-var database = new SmolSearchDatabase(databasePath);
-await database.InitializeAsync();
+var database = new SmolSearchDatabase(
+    databasePath,
+    readOnly: true);
 
 var documents = database.CreateDocumentStore();
 
