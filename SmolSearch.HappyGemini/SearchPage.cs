@@ -24,7 +24,7 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
         {
             await response.WriteHeaderAsync(
                 GeminiStatusCode.Input,
-                "Search Geminispace",
+                "Search Geminispace (POC snapshot)",
                 cancellationToken);
 
             return;
@@ -62,6 +62,9 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
 
         var gemtext = new StringBuilder();
         gemtext.AppendLine("# SmolSearch");
+        gemtext.AppendLine();
+        gemtext.AppendLine("> Proof of concept: results come from a static crawl snapshot.");
+        gemtext.AppendLine("> The index is not continuously updated yet and results may be stale.");
         gemtext.AppendLine();
         gemtext.AppendLine($"## Results for: {displayQuery}");
         gemtext.AppendLine();
