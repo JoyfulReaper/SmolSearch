@@ -70,13 +70,15 @@ while (queue.Count > 0 &&
                 queue.Enqueue(link);
             }
         }
-
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
     }
     catch (Exception ex)
     {
         Console.WriteLine(
             $"  Failed: {ex.GetType().Name}: {ex.Message}");
+    }
+    finally
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
     }
 }
 
