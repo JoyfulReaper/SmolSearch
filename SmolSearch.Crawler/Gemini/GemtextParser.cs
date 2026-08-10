@@ -99,9 +99,21 @@ public static class GemtextParser
             ? remainder
             : remainder[..separator];
 
-        return Uri.TryCreate(
-            baseUri,
-            target,
-            out link);
+        if (!Uri.TryCreate(baseUri, target, out var parsedLink))
+        {
+            return false;
+        }
+
+        if (string.Equals(
+                parsedLink.Scheme,
+                "gemini",
+                StringComparison.OrdinalIgnoreCase) &&
+            Uri.CheckHostName(parsedLink.IdnHost) == UriHostNameType.Unknown)
+        {
+            return false;
+        }
+
+        link = parsedLink;
+        return true;
     }
 }

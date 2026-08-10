@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SmolSearch.Crawler": {
+      "commandName": "Project",
+      "commandLineArgs": "100"
+    }
+  }
+}
