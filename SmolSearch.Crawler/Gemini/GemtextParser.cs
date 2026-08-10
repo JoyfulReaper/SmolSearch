@@ -116,7 +116,13 @@ public static class GemtextParser
             return false;
         }
 
-        link = parsedLink;
+        link = string.IsNullOrEmpty(parsedLink.Fragment)
+            ? parsedLink
+            : new UriBuilder(parsedLink)
+            {
+                Fragment = string.Empty
+            }.Uri;
+
         return true;
     }
 }
