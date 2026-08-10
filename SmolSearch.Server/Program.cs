@@ -2,7 +2,12 @@
 
 var builder = WebApplication.CreateBuilder(args);
 
-var databasePath = Path.GetFullPath("smolsearch.db");
+var configuredDatabasePath = builder.Configuration["SmolSearch:DatabasePath"];
+
+var databasePath = Path.GetFullPath(
+    string.IsNullOrWhiteSpace(configuredDatabasePath)
+        ? "smolsearch.db"
+        : configuredDatabasePath);
 
 Console.WriteLine($"Database: {databasePath}");
 
