@@ -1,8 +1,11 @@
-﻿namespace SmolSearch.Crawler.Gemini;
+﻿using System.Text;
+
+namespace SmolSearch.Crawler.Gemini;
 
 public static class GemtextParser
 {
     private const int MaxLinks = 512;
+    private const int MaxGeminiUrlLength = 1024;
 
     public static GemtextParseResult Parse(
         Uri baseUri,
@@ -116,13 +119,23 @@ public static class GemtextParser
             return false;
         }
 
-        link = string.IsNullOrEmpty(parsedLink.Fragment)
+        var normalizedLink = string.IsNullOrEmpty(parsedLink.Fragment)
             ? parsedLink
             : new UriBuilder(parsedLink)
             {
                 Fragment = string.Empty
             }.Uri;
 
+        if (string.Equals(
+                normalizedLink.Scheme,
+                "gemini",
+                StringComparison.OrdinalIgnoreCase) &&
+            Encoding.UTF8.GetByteCount(normalizedLink.AbsoluteUri) > MaxGeminiUrlLength)
+        {
+            return false;
+        }
+
+        link = normalizedLink;
         return true;
     }
 }
