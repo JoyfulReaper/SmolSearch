@@ -70,6 +70,11 @@ public sealed class GeminiRobotsPolicy
                     "disallow",
                     StringComparison.OrdinalIgnoreCase))
             {
+                if (currentGroup is not null)
+                {
+                    sawDirective = true;
+                }
+
                 continue;
             }
 
@@ -134,6 +139,29 @@ public sealed class GeminiRobotsPolicy
         if (anchored)
         {
             pattern = pattern[..^1];
+        }
+
+        if (!pattern.Contains('*'))
+        {
+            if (anchored)
+            {
+                return path.Equals(
+                    pattern,
+                    StringComparison.Ordinal);
+            }
+
+            return path.Equals(
+                       pattern,
+                       StringComparison.Ordinal) ||
+                   (pattern.EndsWith(
+                        "/",
+                        StringComparison.Ordinal) &&
+                    path.StartsWith(
+                        pattern,
+                        StringComparison.Ordinal)) ||
+                   path.StartsWith(
+                       pattern + "/",
+                       StringComparison.Ordinal);
         }
 
         if (!anchored)
