@@ -187,16 +187,16 @@ public sealed class GeminiClient
             await sslStream.WriteAsync(requestBytes, requestToken);
             await sslStream.FlushAsync(requestToken);
 
+            var header = await ReadResponseHeaderAsync(
+                sslStream,
+                requestToken);
+
             using var reader = new StreamReader(
                 sslStream,
                 new UTF8Encoding(false, false),
                 detectEncodingFromByteOrderMarks: false,
                 bufferSize: 1024,
                 leaveOpen: true);
-
-            var header = await reader.ReadLineAsync(requestToken)
-                ?? throw new InvalidDataException(
-                    "Gemini server returned no response header.");
 
             if (header.Length < 3 ||
                 header[2] != ' ' ||
@@ -264,5 +264,46 @@ public sealed class GeminiClient
             throw new TimeoutException(
                 $"Gemini request timed out: {uri}");
         }
+    }
+
+    private static async Task<string> ReadResponseHeaderAsync(
+        Stream stream,
+        CancellationToken cancellationToken)
+    {
+        const int headerPrefixLength = 3;
+        const int terminatorLength = 2;
+
+        var buffer = new byte[
+            headerPrefixLength + MaxMetaLength + terminatorLength];
+
+        var length = 0;
+
+        while (length < buffer.Length)
+        {
+            var read = await stream.ReadAsync(
+                buffer.AsMemory(length, 1),
+                cancellationToken);
+
+            if (read == 0)
+            {
+                throw new InvalidDataException(
+                    "Gemini server returned an incomplete response header.");
+            }
+
+            length += read;
+
+            if (length >= 2 &&
+                buffer[length - 2] == '\r' &&
+                buffer[length - 1] == '\n')
+            {
+                return Encoding.UTF8.GetString(
+                    buffer,
+                    0,
+                    length - terminatorLength);
+            }
+        }
+
+        throw new InvalidDataException(
+            "Gemini response header exceeds maximum length.");
     }
 }
