@@ -11,4 +11,10 @@
 		<PackageReference Include="HappyGemini.Extensibility" Version="0.0.1" ExcludeAssets="runtime" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<None Update="happygemini.plugin.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
 </Project>
