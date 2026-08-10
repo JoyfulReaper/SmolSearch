@@ -73,8 +73,8 @@ public sealed class DocumentStore
             """
             SELECT
                 d.url AS Url,
-                d.title AS Title,
-                snippet(document_fts, 1, '', '', '...', 24) AS Snippet,
+                substr(d.title, 1, 256) AS Title,
+                substr(snippet(document_fts, 1, '', '', '...', 24), 1, 512) AS Snippet,
                 bm25(document_fts) AS Rank
             FROM document_fts
             JOIN documents d ON d.id = document_fts.rowid
