@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
 using SmolSearch.Core;
+using System.Globalization;
 
 namespace SmolSearch.Storage;
 
@@ -33,13 +34,28 @@ public sealed class GeminiCertificateStore
 
         await using var connection = new SqliteConnection(_connectionString);
 
-        return await connection.QuerySingleOrDefaultAsync<GeminiCertificatePin>(
+        var row = await connection.QuerySingleOrDefaultAsync<CertificateRow>(
             sql,
             new
             {
                 Host = host,
                 Port = port
             });
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        return new GeminiCertificatePin
+        {
+            Host = row.Host,
+            Port = row.Port,
+            Fingerprint = row.Fingerprint,
+            ExpiresAt = DateTimeOffset.Parse(
+                row.ExpiresAt,
+                CultureInfo.InvariantCulture)
+        };
     }
 
     public async Task UpsertAsync(GeminiCertificatePin certificate)
@@ -69,6 +85,24 @@ public sealed class GeminiCertificateStore
 
         await using var connection = new SqliteConnection(_connectionString);
 
-        await connection.ExecuteAsync(sql, certificate);
+        await connection.ExecuteAsync(
+            sql,
+            new
+            {
+                certificate.Host,
+                certificate.Port,
+                certificate.Fingerprint,
+                ExpiresAt = certificate.ExpiresAt.ToString(
+                    "O",
+                    CultureInfo.InvariantCulture)
+            });
+    }
+
+    private sealed record CertificateRow
+    {
+        public required string Host { get; init; }
+        public int Port { get; init; }
+        public required string Fingerprint { get; init; }
+        public required string ExpiresAt { get; init; }
     }
 }
