@@ -1,26 +1,32 @@
 ﻿using SmolSearch.Storage;
 
-var database = new SmolSearchDatabase("smolsearch.db");
+var builder = WebApplication.CreateBuilder(args);
+
+var databasePath = Path.GetFullPath("smolsearch.db");
+
+Console.WriteLine($"Database: {databasePath}");
+
+var database = new SmolSearchDatabase(databasePath);
 await database.InitializeAsync();
 
 var documents = database.CreateDocumentStore();
 
-Console.Write("Search: ");
+var app = builder.Build();
 
-var query = Console.ReadLine();
-
-if (string.IsNullOrWhiteSpace(query))
+app.MapGet("/api/search", async (string? q, int? limit) =>
 {
-    return;
-}
+    if (string.IsNullOrWhiteSpace(q))
+    {
+        return Results.BadRequest(new
+        {
+            Error = "Query parameter 'q' is required."
+        });
+    }
 
-var results = await documents.SearchAsync(query, 10);
+    var resultLimit = Math.Clamp(limit ?? 20, 1, 100);
+    var results = await documents.SearchAsync(q, resultLimit);
 
-Console.WriteLine();
-Console.WriteLine($"# Search results for: {query}");
-Console.WriteLine();
+    return Results.Ok(results);
+});
 
-foreach (var result in results)
-{
-    Console.WriteLine($"=> {result.Url} {result.Title ?? result.Url}");
-}
+await app.RunAsync();
