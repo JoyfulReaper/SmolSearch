@@ -70,6 +70,8 @@ while (queue.Count > 0 &&
                 queue.Enqueue(link);
             }
         }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
     }
     catch (Exception ex)
     {

@@ -16,6 +16,9 @@ public sealed class GeminiClient
     private const int MaxRequestLength = 1024;
     private const int MaxMetaLength = 1024;
 
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+    private const int MaxBodyLength = 1_048_576;
+
     private readonly GeminiCertificateStore _certificateStore;
 
     public GeminiClient(GeminiCertificateStore certificateStore)
@@ -30,6 +33,12 @@ public sealed class GeminiClient
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
+
+        using var timeoutSource =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(RequestTimeout);
+
+        var requestToken = timeoutSource.Token;
 
         if (!uri.IsAbsoluteUri ||
             !string.Equals(uri.Scheme, "gemini", StringComparison.OrdinalIgnoreCase))
@@ -77,7 +86,7 @@ public sealed class GeminiClient
         await tcpClient.ConnectAsync(
             uri.Host,
             port,
-            cancellationToken);
+            requestToken);
 
         await using var sslStream = new SslStream(
             tcpClient.GetStream(),
@@ -129,7 +138,7 @@ public sealed class GeminiClient
                         return true;
                     }
             },
-            cancellationToken);
+            requestToken);
 
         if (newCertificate is not null)
         {
@@ -141,9 +150,9 @@ public sealed class GeminiClient
 
         await sslStream.WriteAsync(
             requestBytes,
-            cancellationToken);
+            requestToken);
 
-        await sslStream.FlushAsync(cancellationToken);
+        await sslStream.FlushAsync(requestToken);
 
         using var reader = new StreamReader(
             sslStream,
@@ -152,7 +161,7 @@ public sealed class GeminiClient
             bufferSize: 1024,
             leaveOpen: true);
 
-        var header = await reader.ReadLineAsync(cancellationToken)
+        var header = await reader.ReadLineAsync(requestToken)
             ?? throw new InvalidDataException(
                 "Gemini server returned no response header.");
 
@@ -188,8 +197,33 @@ public sealed class GeminiClient
 
         if (isSuccess && isText)
         {
-            body = await reader.ReadToEndAsync(
-                cancellationToken);
+            var builder = new StringBuilder();
+            var buffer = new char[8192];
+
+            while (true)
+            {
+                var read = await reader.ReadAsync(
+                    buffer,
+                    requestToken);
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                if (builder.Length + read > MaxBodyLength)
+                {
+                    throw new InvalidDataException(
+                        "Gemini response body exceeds maximum size.");
+                }
+
+                builder.Append(
+                    buffer,
+                    0,
+                    read);
+            }
+
+            body = builder.ToString();
         }
 
         return new GeminiResponse(
