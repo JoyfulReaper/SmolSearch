@@ -14,6 +14,54 @@ public sealed class CrawlFrontierStore
         _connectionString = connectionString;
     }
 
+    public async Task AddRangeAsync(IEnumerable<Uri> uris)
+    {
+        ArgumentNullException.ThrowIfNull(uris);
+
+        const string sql =
+            """
+            INSERT OR IGNORE INTO crawl_frontier
+            (
+                url,
+                discovered_at
+            )
+            VALUES
+            (
+                @Url,
+                @DiscoveredAt
+            );
+            """;
+
+        var discoveredAt = DateTimeOffset.UtcNow.ToString(
+            "O",
+            CultureInfo.InvariantCulture);
+
+        var rows = uris.Select(uri =>
+        {
+            ArgumentNullException.ThrowIfNull(uri);
+
+            return new
+            {
+                Url = uri.AbsoluteUri,
+                DiscoveredAt = discoveredAt
+            };
+        }).ToList();
+
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await connection.ExecuteAsync(sql, rows, transaction);
+
+        await transaction.CommitAsync();
+    }
+
     public async Task AddAsync(Uri uri)
     {
         ArgumentNullException.ThrowIfNull(uri);

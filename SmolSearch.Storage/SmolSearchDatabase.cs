@@ -28,6 +28,11 @@ public sealed class SmolSearchDatabase
         return new GeminiCertificateStore(_connectionString);
     }
 
+    public CrawlFrontierStore CreateCrawlFrontierStore()
+    {
+        return new CrawlFrontierStore(_connectionString);
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
