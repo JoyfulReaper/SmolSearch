@@ -67,6 +67,8 @@ public sealed class DocumentStore
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
+        var ftsQuery = BuildFtsQuery(query);
+
         const string sql =
             """
             SELECT
@@ -87,10 +89,21 @@ public sealed class DocumentStore
             sql,
             new
             {
-                Query = query,
+                Query = ftsQuery,
                 Limit = limit
             });
 
         return results.AsList();
+    }
+
+    private static string BuildFtsQuery(string query)
+    {
+        var terms = query.Split(
+            (char[]?)null,
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return string.Join(
+            ' ',
+            terms.Select(term => $"\"{term.Replace("\"", "\"\"")}\""));
     }
 }
