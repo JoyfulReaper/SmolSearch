@@ -89,6 +89,13 @@ public sealed class SmolSearchDatabase
 
                 PRIMARY KEY (host, port)
             );
+
+            CREATE TABLE IF NOT EXISTS crawl_frontier
+            (
+                url           TEXT PRIMARY KEY,
+                discovered_at TEXT NOT NULL,
+                attempted_at  TEXT
+            );
             """;
 
         await connection.ExecuteAsync(
