@@ -15,11 +15,6 @@ public sealed class DocumentStore
         _connectionString = connectionString;
     }
 
-    public DocumentStore CreateDocumentStore()
-    {
-        return new DocumentStore(_connectionString);
-    }
-
     public async Task UpsertAsync(SearchDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);

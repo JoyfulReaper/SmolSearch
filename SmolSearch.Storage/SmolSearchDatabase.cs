@@ -18,6 +18,11 @@ public sealed class SmolSearchDatabase
         }.ToString();
     }
 
+    public DocumentStore CreateDocumentStore()
+    {
+        return new DocumentStore(_connectionString);
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
