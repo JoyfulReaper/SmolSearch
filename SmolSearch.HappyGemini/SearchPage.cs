@@ -2,6 +2,7 @@
 using SmolSearch.Core;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 
 namespace SmolSearch.HappyGemini;
 
@@ -35,7 +36,27 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
         var client = httpClientFactory.CreateClient();
         var url = $"{baseUrl.TrimEnd('/')}/api/search?q={Uri.EscapeDataString(query)}";
 
-        var results = await client.GetFromJsonAsync<SearchResult[]>(url, cancellationToken) ?? [];
+        SearchResult[] results;
+
+        try
+        {
+            results = await client.GetFromJsonAsync<SearchResult[]>(url, cancellationToken) ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            await WriteBackendUnavailableAsync(response, cancellationToken);
+            return;
+        }
+        catch (JsonException)
+        {
+            await WriteBackendUnavailableAsync(response, cancellationToken);
+            return;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            await WriteBackendUnavailableAsync(response, cancellationToken);
+            return;
+        }
 
         var displayQuery = ToSingleLine(query);
 
@@ -68,6 +89,16 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
 
         await response.WriteTextAsync(
             gemtext.ToString().ReplaceLineEndings("\r\n"),
+            cancellationToken);
+    }
+
+    private static async Task WriteBackendUnavailableAsync(
+        GeminiResponseWriter response,
+        CancellationToken cancellationToken)
+    {
+        await response.WriteHeaderAsync(
+            GeminiStatusCode.ServerUnavailable,
+            "SmolSearch backend temporarily unavailable",
             cancellationToken);
     }
 
