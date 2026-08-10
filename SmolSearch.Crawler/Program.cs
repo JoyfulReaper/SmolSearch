@@ -30,21 +30,19 @@ var seed =
 discovered.Add(seed.AbsoluteUri);
 queue.Enqueue(seed);
 
-var crawled = 0;
+var attempted = 0;
+var indexed = 0;
 
-while (queue.Count > 0 &&
-       crawled < maxPages)
+while (queue.Count > 0 && attempted < maxPages)
 {
     var uri = queue.Dequeue();
+    attempted++;
 
     Console.WriteLine($"Fetching: {uri}");
 
     try
     {
-        var result =
-            await crawler.CrawlAsync(uri);
-
-        crawled++;
+        var result = await crawler.CrawlAsync(uri);
 
         if (result is null)
         {
@@ -52,8 +50,9 @@ while (queue.Count > 0 &&
             continue;
         }
 
-        Console.WriteLine(
-            $"  Indexed: {result.Title ?? "(no title)"}");
+        indexed++;
+
+        Console.WriteLine($"  Indexed: {result.Title ?? "(no title)"}");
 
         foreach (var link in result.Links)
         {
@@ -83,6 +82,7 @@ while (queue.Count > 0 &&
 }
 
 Console.WriteLine();
-Console.WriteLine($"Crawled: {crawled}");
+Console.WriteLine($"Attempted: {attempted}");
+Console.WriteLine($"Indexed: {indexed}");
 Console.WriteLine($"Discovered: {discovered.Count}");
 Console.WriteLine($"Remaining queue: {queue.Count}");
