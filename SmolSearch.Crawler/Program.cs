@@ -1,5 +1,4 @@
-﻿using SmolSearch.Core;
-using SmolSearch.Crawler.Gemini;
+﻿using SmolSearch.Crawler.Gemini;
 using SmolSearch.Storage;
 
 var database = new SmolSearchDatabase("smolsearch.db");
@@ -12,43 +11,23 @@ var certificates =
 var documents =
     database.CreateDocumentStore();
 
-var client = new GeminiClient(certificates);
+var client =
+    new GeminiClient(certificates);
 
-var uri = new Uri("gemini://geminiprotocol.net/");
+var crawler =
+    new GeminiCrawler(client, documents);
 
-var response = await client.GetAsync(uri);
+var uri =
+    new Uri("gemini://geminiprotocol.net/");
+
+var result =
+    await crawler.CrawlAsync(uri);
 
 Console.WriteLine(
-    $"{response.StatusCode} {response.Meta}");
+    $"Indexed: {result?.Title ?? "(not indexed)"}");
 
-if (response.Body is null)
+if (result is not null)
 {
-    return;
-}
-
-var parsed = GemtextParser.Parse(
-    uri,
-    response.Body);
-
-await documents.UpsertAsync(new SearchDocument
-{
-    Url = uri,
-    Title = parsed.Title,
-    Content = response.Body,
-    ContentType = response.Meta,
-    FetchedAt = DateTimeOffset.UtcNow
-});
-
-Console.WriteLine();
-Console.WriteLine($"Indexed: {parsed.Title ?? uri.ToString()}");
-
-var results = await documents.SearchAsync("Gemini");
-
-Console.WriteLine();
-Console.WriteLine("Search results:");
-
-foreach (var result in results)
-{
-    Console.WriteLine($"{result.Rank}: {result.Title}");
-    Console.WriteLine(result.Url);
+    Console.WriteLine(
+        $"Discovered: {result.Links.Count} links");
 }
