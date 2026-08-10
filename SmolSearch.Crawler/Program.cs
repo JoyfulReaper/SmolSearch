@@ -14,7 +14,14 @@ if (maxPages <= 0)
         "Maximum pages must be greater than zero.");
 }
 
-var database = new SmolSearchDatabase("smolsearch.db");
+var databasePath = Path.GetFullPath(
+    args.Length > 1 && !string.IsNullOrWhiteSpace(args[1])
+        ? args[1]
+        : "smolsearch.db");
+
+Console.WriteLine($"Database: {databasePath}");
+
+var database = new SmolSearchDatabase(databasePath);
 await database.InitializeAsync();
 
 var certificates = database.CreateGeminiCertificateStore();
