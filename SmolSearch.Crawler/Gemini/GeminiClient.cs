@@ -30,8 +30,19 @@ public sealed class GeminiClient
         _certificateStore = certificateStore;
     }
 
+    public Task<GeminiResponse> GetAsync(
+        Uri uri,
+        CancellationToken cancellationToken = default)
+    {
+        return GetAsync(
+            uri,
+            requestPolicy: null,
+            cancellationToken);
+    }
+
     public async Task<GeminiResponse> GetAsync(
         Uri uri,
+        Func<Uri, CancellationToken, Task<bool>>? requestPolicy,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
@@ -40,6 +51,12 @@ public sealed class GeminiClient
 
         for (var redirectCount = 0; redirectCount <= MaxRedirects; redirectCount++)
         {
+            if (requestPolicy is not null &&
+                !await requestPolicy(currentUri, cancellationToken))
+            {
+                throw new GeminiRequestRejectedException(currentUri);
+            }
+
             var response = await SendAsync(currentUri, cancellationToken);
 
             if (response.StatusCode is < 30 or >= 40)
@@ -371,4 +388,15 @@ public sealed class GeminiClient
         return false;
     }
 
+}
+
+public sealed class GeminiRequestRejectedException : Exception
+{
+    public GeminiRequestRejectedException(Uri uri)
+        : base($"Gemini request rejected by crawl policy: {uri}")
+    {
+        Uri = uri;
+    }
+
+    public Uri Uri { get; }
 }

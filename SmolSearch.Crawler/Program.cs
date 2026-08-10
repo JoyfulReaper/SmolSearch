@@ -29,7 +29,8 @@ var documents = database.CreateDocumentStore();
 var frontier = database.CreateCrawlFrontierStore();
 
 var client = new GeminiClient(certificates);
-var crawler = new GeminiCrawler(client, documents);
+var robots = new GeminiRobotsPolicyProvider(client);
+var crawler = new GeminiCrawler(client, documents, robots);
 var runner = new GeminiCrawlRunner(crawler, frontier);
 
 var seed = new Uri("gemini://geminiprotocol.net/");

@@ -7,16 +7,20 @@ public sealed class GeminiCrawler
 {
     private readonly GeminiClient _client;
     private readonly DocumentStore _documents;
+    private readonly GeminiRobotsPolicyProvider _robots;
 
     public GeminiCrawler(
         GeminiClient client,
-        DocumentStore documents)
+        DocumentStore documents,
+        GeminiRobotsPolicyProvider robots)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(robots);
 
         _client = client;
         _documents = documents;
+        _robots = robots;
     }
 
     public async Task<GemtextParseResult?> CrawlAsync(
@@ -25,9 +29,19 @@ public sealed class GeminiCrawler
     {
         ArgumentNullException.ThrowIfNull(uri);
 
-        var response = await _client.GetAsync(
-            uri,
-            cancellationToken);
+        GeminiResponse response;
+
+        try
+        {
+            response = await _client.GetAsync(
+                uri,
+                _robots.IsAllowedAsync,
+                cancellationToken);
+        }
+        catch (GeminiRequestRejectedException)
+        {
+            return null;
+        }
 
         if (response.StatusCode is < 20 or >= 30 ||
             response.Body is null ||
