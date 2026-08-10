@@ -2,6 +2,8 @@
 
 public static class GemtextParser
 {
+    private const int MaxLinks = 512;
+
     public static GemtextParseResult Parse(
         Uri baseUri,
         string content)
@@ -34,7 +36,8 @@ public static class GemtextParser
                 title = heading;
             }
 
-            if (TryGetLink(baseUri, line, out var link))
+            if (links.Count < MaxLinks &&
+                TryGetLink(baseUri, line, out var link))
             {
                 links.Add(link);
             }
