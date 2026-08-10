@@ -102,10 +102,26 @@ public sealed class CrawlFrontierStore
 
         const string sql =
             """
+            WITH pending AS
+            (
+                SELECT
+                    url,
+                    discovered_at,
+                    ROW_NUMBER() OVER
+                    (
+                        PARTITION BY substr(
+                            url,
+                            10,
+                            instr(substr(url, 10), '/') - 1)
+                        ORDER BY discovered_at, rowid
+                    ) AS host_position
+                FROM crawl_frontier
+                WHERE attempted_at IS NULL
+            )
             SELECT url
-            FROM crawl_frontier
-            WHERE attempted_at IS NULL
-            ORDER BY discovered_at
+            FROM pending
+            WHERE host_position = 1
+            ORDER BY RANDOM()
             LIMIT @Limit;
             """;
 
