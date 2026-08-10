@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SmolSearch.Core/SmolSearch.Core.csproj" />
+  <Project Path="SmolSearch.Crawler/SmolSearch.Crawler.csproj" />
+  <Project Path="SmolSearch.Server/SmolSearch.Server.csproj" Id="c2512eb3-ae54-4203-96c1-fb3f45e9afeb" />
+  <Project Path="SmolSearch.Storage/SmolSearch.Storage.csproj" />
+</Solution>
