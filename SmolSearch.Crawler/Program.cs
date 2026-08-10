@@ -1,7 +1,18 @@
 ﻿using SmolSearch.Crawler.Gemini;
 using SmolSearch.Storage;
 
-const int maxPages = 50;
+const int defaultMaxPages = 50;
+
+var maxPages = args.Length > 0 && int.TryParse(args[0], out var configuredMaxPages)
+    ? configuredMaxPages
+    : defaultMaxPages;
+
+if (maxPages <= 0)
+{
+    throw new ArgumentOutOfRangeException(
+        nameof(maxPages),
+        "Maximum pages must be greater than zero.");
+}
 
 var database = new SmolSearchDatabase("smolsearch.db");
 await database.InitializeAsync();
