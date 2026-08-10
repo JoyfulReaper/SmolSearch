@@ -90,10 +90,18 @@ public sealed class GeminiRobotsPolicyProvider
 
     private static bool IsSupportedContentType(string meta)
     {
-        return meta.StartsWith(
+        var separator = meta.IndexOf(';');
+
+        var contentType = separator < 0
+            ? meta
+            : meta[..separator];
+
+        contentType = contentType.Trim();
+
+        return contentType.Equals(
                    "text/plain",
                    StringComparison.OrdinalIgnoreCase) ||
-               meta.StartsWith(
+               contentType.Equals(
                    "text/gemini",
                    StringComparison.OrdinalIgnoreCase);
     }
