@@ -1,0 +1,17 @@
+services:
+  smolsearch-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: smolsearch-server
+    restart: unless-stopped
+    environment:
+      SmolSearch__DatabasePath: /data/smolsearch.db
+    volumes:
+      - /opt/smolsearch/data/smolsearch.db:/data/smolsearch.db:ro
+    networks:
+      - smolsearch
+
+networks:
+  smolsearch:
+    name: smolsearch
