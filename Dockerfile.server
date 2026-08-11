@@ -1,0 +1,26 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY SmolSearch.Core/SmolSearch.Core.csproj SmolSearch.Core/
+COPY SmolSearch.Storage/SmolSearch.Storage.csproj SmolSearch.Storage/
+COPY SmolSearch.Server/SmolSearch.Server.csproj SmolSearch.Server/
+
+RUN dotnet restore SmolSearch.Server/SmolSearch.Server.csproj
+
+COPY . .
+
+RUN dotnet publish SmolSearch.Server/SmolSearch.Server.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+
+ENV ASPNETCORE_URLS=http://+:8080
+
+EXPOSE 8080
+
+COPY --from=build /app/publish .
+
+ENTRYPOINT ["dotnet", "SmolSearch.Server.dll"]
