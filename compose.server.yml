@@ -10,7 +10,10 @@ services:
     volumes:
       - /opt/smolsearch/data/smolsearch.db:/data/smolsearch.db:ro
     networks:
-      - smolsearch
+      - 
+      
+     ports:
+       - "127.0.0.1:55865:8080"
 
 networks:
   smolsearch:
