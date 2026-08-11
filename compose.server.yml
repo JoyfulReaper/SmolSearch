@@ -9,11 +9,12 @@ services:
       SmolSearch__DatabasePath: /data/smolsearch.db
     volumes:
       - /opt/smolsearch/data/smolsearch.db:/data/smolsearch.db:ro
-    networks:
-      - 
       
-     ports:
-       - "127.0.0.1:55865:8080"
+    ports:
+     - "127.0.0.1:55865:8080"
+      
+    networks:
+      - smolsearch
 
 networks:
   smolsearch:
