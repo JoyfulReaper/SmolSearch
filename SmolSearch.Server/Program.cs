@@ -26,7 +26,7 @@ var documents = database.CreateDocumentStore();
 
 var app = builder.Build();
 
-app.MapGet("/api/search", async (string? q, int? limit) =>
+app.MapGet("/api/search", async (string? q, int? limit, int? offset) =>
 {
     if (string.IsNullOrWhiteSpace(q))
     {
@@ -52,8 +52,16 @@ app.MapGet("/api/search", async (string? q, int? limit) =>
         });
     }
 
+    if (offset is < 0)
+    {
+        return Results.BadRequest(new
+        {
+            Error = "Offset cannot be negative."
+        });
+    }
+
     var resultLimit = Math.Clamp(limit ?? 20, 1, 100);
-    var results = await documents.SearchAsync(q, resultLimit);
+    var results = await documents.SearchAsync(q, resultLimit, offset ?? 0);
 
     return Results.Ok(results);
 });
