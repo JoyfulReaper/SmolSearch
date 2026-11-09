@@ -7,7 +7,7 @@ namespace SmolSearch.Storage;
 public sealed class CrawlFrontierStore
 {
     private readonly string _connectionString;
-    private const int MaxFrontierEntries = 50_000;
+    private const int MaxFrontierEntries = 250_000;
 
     internal CrawlFrontierStore(string connectionString)
     {
