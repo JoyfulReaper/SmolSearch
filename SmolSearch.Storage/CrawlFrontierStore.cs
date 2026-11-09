@@ -7,7 +7,8 @@ namespace SmolSearch.Storage;
 public sealed class CrawlFrontierStore
 {
     private readonly string _connectionString;
-    private const int MaxFrontierEntries = 50_000;
+    private const int MaxFrontierEntries = 250_000;
+    private const int MaxSiteGroupEntries = 2_000;
 
     internal CrawlFrontierStore(string connectionString)
     {
@@ -19,35 +20,54 @@ public sealed class CrawlFrontierStore
     {
         ArgumentNullException.ThrowIfNull(uris);
 
+
         const string sql =
             """
             INSERT OR IGNORE INTO crawl_frontier
             (
                 url,
-                discovered_at
+                discovered_at,
+                host,
+                site_group
             )
             SELECT
                 @Url,
-                @DiscoveredAt
+                @DiscoveredAt,
+                @Host,
+                @SiteGroup
             WHERE
-                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries
+                AND
+                (
+                    SELECT COUNT(*)
+                    FROM crawl_frontier
+                    WHERE site_group = @SiteGroup
+                ) < @MaxSiteGroupEntries;
             """;
+
 
         var discoveredAt = DateTimeOffset.UtcNow.ToString(
             "O",
             CultureInfo.InvariantCulture);
 
+
         var rows = uris.Select(uri =>
         {
             ArgumentNullException.ThrowIfNull(uri);
+
+            var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
 
             return new
             {
                 Url = uri.AbsoluteUri,
                 DiscoveredAt = discoveredAt,
-                MaxEntries = MaxFrontierEntries
+                Host = host,
+                SiteGroup = siteGroup,
+                MaxEntries = MaxFrontierEntries,
+                MaxSiteGroupEntries = MaxSiteGroupEntries
             };
         }).ToList();
+
 
         if (rows.Count == 0)
         {
@@ -68,20 +88,32 @@ public sealed class CrawlFrontierStore
     {
         ArgumentNullException.ThrowIfNull(uri);
 
+
         const string sql =
             """
             INSERT OR IGNORE INTO crawl_frontier
             (
                 url,
-                discovered_at
+                discovered_at,
+                host,
+                site_group
             )
             SELECT
                 @Url,
-                @DiscoveredAt
+                @DiscoveredAt,
+                @Host,
+                @SiteGroup
             WHERE
-                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries
+                AND
+                (
+                    SELECT COUNT(*)
+                    FROM crawl_frontier
+                    WHERE site_group = @SiteGroup
+                ) < @MaxSiteGroupEntries;
             """;
 
+        var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
         await using var connection = new SqliteConnection(_connectionString);
 
         await connection.ExecuteAsync(
@@ -89,10 +121,11 @@ public sealed class CrawlFrontierStore
             new
             {
                 Url = uri.AbsoluteUri,
-                DiscoveredAt = DateTimeOffset.UtcNow.ToString(
-                    "O",
-                    CultureInfo.InvariantCulture),
-                MaxEntries = MaxFrontierEntries
+                DiscoveredAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                Host = host,
+                SiteGroup = siteGroup,
+                MaxEntries = MaxFrontierEntries,
+                MaxSiteGroupEntries = MaxSiteGroupEntries
             });
     }
 
@@ -105,25 +138,31 @@ public sealed class CrawlFrontierStore
 
         const string sql =
             """
-            WITH pending AS
+            WITH host_heads AS
             (
                 SELECT
-                    url,
-                    discovered_at,
-                    ROW_NUMBER() OVER
-                    (
-                        PARTITION BY substr(
-                            url,
-                            10,
-                            instr(substr(url, 10), '/') - 1)
-                        ORDER BY discovered_at, rowid
-                    ) AS host_position
+                    site_group,
+                    host,
+                    MIN(rowid) AS first_rowid
                 FROM crawl_frontier
                 WHERE attempted_at IS NULL
+                GROUP BY site_group, host
+            ),
+            group_heads AS
+            (
+                SELECT
+                    first_rowid,
+                    ROW_NUMBER() OVER
+                    (
+                        PARTITION BY site_group
+                        ORDER BY RANDOM()
+                    ) AS host_position
+                FROM host_heads
             )
-            SELECT url
-            FROM pending
-            WHERE host_position = 1
+            SELECT f.url
+            FROM group_heads g
+            JOIN crawl_frontier f ON f.rowid = g.first_rowid
+            WHERE g.host_position = 1
             ORDER BY RANDOM()
             LIMIT @Limit;
             """;

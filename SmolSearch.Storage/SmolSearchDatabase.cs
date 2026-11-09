@@ -103,7 +103,9 @@ public sealed class SmolSearchDatabase
             (
                 url           TEXT PRIMARY KEY,
                 discovered_at TEXT NOT NULL,
-                attempted_at  TEXT
+                attempted_at  TEXT,
+                host          TEXT,
+                site_group    TEXT
             );
             """;
 
@@ -111,5 +113,108 @@ public sealed class SmolSearchDatabase
             new CommandDefinition(
                 sql,
                 cancellationToken: cancellationToken));
+
+        var frontierColumns = (await connection.QueryAsync<string>(
+            "SELECT name FROM pragma_table_info('crawl_frontier');"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!frontierColumns.Contains("host"))
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE crawl_frontier ADD COLUMN host TEXT;");
+        }
+
+        if (!frontierColumns.Contains("site_group"))
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE crawl_frontier ADD COLUMN site_group TEXT;");
+        }
+
+        await BackfillFrontierClassificationAsync(connection, cancellationToken);
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                CREATE INDEX IF NOT EXISTS ix_crawl_frontier_pending_group_host
+                ON crawl_frontier(site_group, host)
+                WHERE attempted_at IS NULL;
+                """,
+                cancellationToken: cancellationToken));
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                CREATE INDEX IF NOT EXISTS ix_crawl_frontier_site_group
+                ON crawl_frontier(site_group);
+                """,
+                cancellationToken: cancellationToken));
     }
+
+
+    private static async Task BackfillFrontierClassificationAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const int batchSize = 500;
+
+        const string selectSql =
+            """
+        SELECT url
+        FROM crawl_frontier
+        WHERE host IS NULL OR site_group IS NULL
+        LIMIT @Limit;
+        """;
+
+        const string updateSql =
+            """
+        UPDATE crawl_frontier
+        SET host = @Host,
+            site_group = @SiteGroup
+        WHERE url = @Url
+          AND (host IS NULL OR site_group IS NULL);
+        """;
+
+        while (true)
+        {
+            var urls = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    selectSql,
+                    new { Limit = batchSize },
+                    cancellationToken: cancellationToken))).AsList();
+
+            if (urls.Count == 0)
+            {
+                break;
+            }
+
+            var updates = urls.Select(url =>
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                {
+                    throw new InvalidDataException($"Invalid frontier URL: {url}");
+                }
+
+                var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
+
+                return new
+                {
+                    Url = url,
+                    Host = host,
+                    SiteGroup = siteGroup
+                };
+            }).ToList();
+
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    updateSql,
+                    updates,
+                    transaction: transaction,
+                    cancellationToken: cancellationToken));
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+    }
+
 }
