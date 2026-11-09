@@ -129,5 +129,75 @@ public sealed class SmolSearchDatabase
             await connection.ExecuteAsync(
                 "ALTER TABLE crawl_frontier ADD COLUMN site_group TEXT;");
         }
+
+        await BackfillFrontierClassificationAsync(connection, cancellationToken);
     }
+
+
+    private static async Task BackfillFrontierClassificationAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const int batchSize = 500;
+
+        const string selectSql =
+            """
+        SELECT url
+        FROM crawl_frontier
+        WHERE host IS NULL OR site_group IS NULL
+        LIMIT @Limit;
+        """;
+
+        const string updateSql =
+            """
+        UPDATE crawl_frontier
+        SET host = @Host,
+            site_group = @SiteGroup
+        WHERE url = @Url
+          AND (host IS NULL OR site_group IS NULL);
+        """;
+
+        while (true)
+        {
+            var urls = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    selectSql,
+                    new { Limit = batchSize },
+                    cancellationToken: cancellationToken))).AsList();
+
+            if (urls.Count == 0)
+            {
+                break;
+            }
+
+            var updates = urls.Select(url =>
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                {
+                    throw new InvalidDataException($"Invalid frontier URL: {url}");
+                }
+
+                var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
+
+                return new
+                {
+                    Url = url,
+                    Host = host,
+                    SiteGroup = siteGroup
+                };
+            }).ToList();
+
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    updateSql,
+                    updates,
+                    transaction: transaction,
+                    cancellationToken: cancellationToken));
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+    }
+
 }
