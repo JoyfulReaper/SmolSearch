@@ -140,6 +140,14 @@ public sealed class SmolSearchDatabase
                 WHERE attempted_at IS NULL;
                 """,
                 cancellationToken: cancellationToken));
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                CREATE INDEX IF NOT EXISTS ix_crawl_frontier_site_group
+                ON crawl_frontier(site_group);
+                """,
+                cancellationToken: cancellationToken));
     }
 
 

@@ -8,6 +8,7 @@ public sealed class CrawlFrontierStore
 {
     private readonly string _connectionString;
     private const int MaxFrontierEntries = 250_000;
+    private const int MaxSiteGroupEntries = 2_000;
 
     internal CrawlFrontierStore(string connectionString)
     {
@@ -35,7 +36,13 @@ public sealed class CrawlFrontierStore
                 @Host,
                 @SiteGroup
             WHERE
-                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries
+                AND
+                (
+                    SELECT COUNT(*)
+                    FROM crawl_frontier
+                    WHERE site_group = @SiteGroup
+                ) < @MaxSiteGroupEntries;
             """;
 
 
@@ -96,7 +103,13 @@ public sealed class CrawlFrontierStore
                 @Host,
                 @SiteGroup
             WHERE
-                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
+                (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries
+                AND
+                (
+                    SELECT COUNT(*)
+                    FROM crawl_frontier
+                    WHERE site_group = @SiteGroup
+                ) < @MaxSiteGroupEntries;
             """;
 
         var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
