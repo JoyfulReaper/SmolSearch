@@ -105,25 +105,19 @@ public sealed class CrawlFrontierStore
 
         const string sql =
             """
-            WITH pending AS
+            WITH host_heads AS
             (
-                SELECT
-                    url,
-                    discovered_at,
-                    ROW_NUMBER() OVER
-                    (
-                        PARTITION BY substr(
-                            url,
-                            10,
-                            instr(substr(url, 10), '/') - 1)
-                        ORDER BY discovered_at, rowid
-                    ) AS host_position
+                SELECT MIN(rowid) AS first_rowid
                 FROM crawl_frontier
                 WHERE attempted_at IS NULL
+                GROUP BY substr(
+                    url,
+                    10,
+                    instr(substr(url, 10), '/') - 1)
             )
             SELECT url
-            FROM pending
-            WHERE host_position = 1
+            FROM crawl_frontier
+            WHERE rowid IN (SELECT first_rowid FROM host_heads)
             ORDER BY RANDOM()
             LIMIT @Limit;
             """;
