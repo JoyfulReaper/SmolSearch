@@ -103,7 +103,9 @@ public sealed class SmolSearchDatabase
             (
                 url           TEXT PRIMARY KEY,
                 discovered_at TEXT NOT NULL,
-                attempted_at  TEXT
+                attempted_at  TEXT,
+                host          TEXT,
+                site_group    TEXT
             );
             """;
 
@@ -111,5 +113,21 @@ public sealed class SmolSearchDatabase
             new CommandDefinition(
                 sql,
                 cancellationToken: cancellationToken));
+
+        var frontierColumns = (await connection.QueryAsync<string>(
+            "SELECT name FROM pragma_table_info('crawl_frontier');"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!frontierColumns.Contains("host"))
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE crawl_frontier ADD COLUMN host TEXT;");
+        }
+
+        if (!frontierColumns.Contains("site_group"))
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE crawl_frontier ADD COLUMN site_group TEXT;");
+        }
     }
 }
