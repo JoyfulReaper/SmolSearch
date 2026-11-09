@@ -83,14 +83,29 @@ Failures are isolated per page and printed to the console.
 
 ### Persistent frontier
 
-Discovered URLs and attempt timestamps live in the same SQLite database as the
-index. `INSERT OR IGNORE` provides URL deduplication, so restarting the crawler
-continues with URLs that have not yet been attempted. Pending selection takes
-one candidate per host and randomly chooses among those candidates.
+Discovered URLs, attempt timestamps, normalized `host` values, and
+`site_group` values live in the same SQLite database as the index.
+`INSERT OR IGNORE` deduplicates URLs. Restarting a crawl uses pending URLs
+without resetting previous attempts.
 
-The current frontier is intentionally simple. It holds at most 50,000 entries,
-does not retry attempted failures, and has no recrawl schedule, backoff state,
-or concurrent workers.
+Pending selection takes the oldest pending URL (by insertion order) per host,
+randomly selects a host within each site group, and then randomly selects a
+site group. A known multi-subdomain network, `cities.yesterweb.org` and its
+subdomains, shares the `cities.yesterweb.org` site group. All other hosts are
+separate groups by default. This is selection fairness, not per-host rate
+limiting; requests remain sequential with a global delay.
+
+The frontier admits at most **250,000 URLs total** and **2,000 URLs per site
+group**. Both limits apply to *new discoveries*, counting attempted as well
+as pending entries. Existing rows above a limit are kept, not deleted; an
+already-over-limit group cannot add more URLs. The frontier does not remove
+attempted URLs or retry failures, and has no recrawl schedule, backoff state,
+per-host cooldown, or concurrent workers.
+
+On crawler startup, older databases are migrated in place: missing `host`
+and `site_group` columns are added, existing frontier URLs are classified in
+batches, and indexes are created for pending selection and group counts. Back
+up an existing crawl database before the first run of a new crawler version.
 
 ### TOFU certificates
 
@@ -115,7 +130,8 @@ The limits below come from the crawler source:
 - successful text bodies limited to 1,048,576 decoded UTF-16 code units;
 - at most 512 extracted links per Gemtext page;
 - Gemini links longer than 1,024 UTF-8 bytes are ignored;
-- at most 50,000 persistent frontier entries; and
+- at most 250,000 persistent frontier entries and 2,000 per site group
+  for newly admitted URLs; and
 - a caller-supplied cap on attempted pages per run.
 
 These are useful guardrails, not a complete hostile-content or crawler-abuse
@@ -138,19 +154,22 @@ For example:
 
 ```sh
 # Attempt up to 50 pages and use ./smolsearch.db
-dotnet run --project SmolSearch.Crawler -- 50
+dotnet run --project SmolSearch.Crawler --no-launch-profile -- 50
 
-# Attempt up to 500 pages using an explicit snapshot path
-dotnet run --project SmolSearch.Crawler -- 500 ./data/smolsearch.db
+# Attempt up to 500 pages using an explicit working database path
+dotnet run --project SmolSearch.Crawler --no-launch-profile -- 500 ./data/smolsearch.db
 ```
 
-The checked-in crawler launch profile supplies `100` as its command-line
-argument. Explicit arguments after `--`, as in the examples above, make the run
-size unambiguous.
+The checked-in crawler launch profile supplies `1000` and a machine-specific
+Windows database path from an older crawl. Use `--no-launch-profile` and
+explicit arguments, as above, to avoid accidentally using that path.
 
 The crawler creates and initializes the database when needed. SQLite is put in
 WAL mode, and the schema includes the documents, external-content FTS5,
-certificate-pin, and frontier tables.
+certificate-pin, and frontier tables. For a resumed crawl, keep the same
+working database path and do not clear `attempted_at`. To publish a search
+snapshot, stop writes and make a consistent SQLite backup/checkpoint rather
+than copying only the live `.db` file while WAL writes are in progress.
 
 ## Search and ranking
 
@@ -266,9 +285,10 @@ workstation, safely checkpointing and integrity-checking the stopped SQLite
 database, deploying the frozen snapshot, smoke-testing the complete Gemini
 path, and recording a small baseline.
 
-After that POC, planned work includes proper host-aware scheduling with bounded
-concurrency, retry/backoff and recrawl state, continuous crawling, deliberate
-corpus growth, and Gopher support at the fetch/parser boundary. These are
+After that POC, planned work includes per-host cooldowns and bounded
+concurrency beyond today's group-aware random selection, retry/backoff and
+recrawl state, continuous crawling, deliberate corpus growth, and Gopher
+support at the fetch/parser boundary. These are
 directions, not features available today; see [SmolSearch Plan.md](SmolSearch%20Plan.md)
 for the longer design notes.
 
