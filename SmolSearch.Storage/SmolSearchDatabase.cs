@@ -131,6 +131,15 @@ public sealed class SmolSearchDatabase
         }
 
         await BackfillFrontierClassificationAsync(connection, cancellationToken);
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                CREATE INDEX IF NOT EXISTS ix_crawl_frontier_pending_group_host
+                ON crawl_frontier(site_group, host)
+                WHERE attempted_at IS NULL;
+                """,
+                cancellationToken: cancellationToken));
     }
 
 

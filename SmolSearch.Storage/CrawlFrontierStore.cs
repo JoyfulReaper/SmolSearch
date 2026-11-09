@@ -125,17 +125,29 @@ public sealed class CrawlFrontierStore
             """
             WITH host_heads AS
             (
-                SELECT MIN(rowid) AS first_rowid
+                SELECT
+                    site_group,
+                    host,
+                    MIN(rowid) AS first_rowid
                 FROM crawl_frontier
                 WHERE attempted_at IS NULL
-                GROUP BY substr(
-                    url,
-                    10,
-                    instr(substr(url, 10), '/') - 1)
+                GROUP BY site_group, host
+            ),
+            group_heads AS
+            (
+                SELECT
+                    first_rowid,
+                    ROW_NUMBER() OVER
+                    (
+                        PARTITION BY site_group
+                        ORDER BY RANDOM()
+                    ) AS host_position
+                FROM host_heads
             )
-            SELECT url
-            FROM crawl_frontier
-            WHERE rowid IN (SELECT first_rowid FROM host_heads)
+            SELECT f.url
+            FROM group_heads g
+            JOIN crawl_frontier f ON f.rowid = g.first_rowid
+            WHERE g.host_position = 1
             ORDER BY RANDOM()
             LIMIT @Limit;
             """;
