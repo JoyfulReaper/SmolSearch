@@ -135,17 +135,23 @@ Implemented:
 - Gemtext link extraction;
 - relative-link resolution;
 - URL deduplication through the persistent frontier;
-- persistent crawl frontier;
+- persistent crawl frontier with host and site-group classification;
+- automatic backfill of existing frontier URLs during database initialization;
+- random selection across site groups, then hosts within each group;
+- 250,000-URL global frontier admission cap and 2,000-URL per-group cap;
 - per-page failure isolation;
 - graceful cancellation;
 - crawl page caps for controlled runs;
 - polite delay between requests.
 
 The crawler has already indexed real Geminispace and resumed from persistent frontier state across runs.
+An existing database is migrated to add and backfill `host` and `site_group`
+metadata at initialization. Only `*.cities.yesterweb.org` is explicitly
+grouped together; other hosts remain independent unless this policy changes.
 
 Still intentionally deferred for the production crawler:
 
-- host-aware scheduling/fairness;
+- per-host cooldowns and configurable host pacing;
 - bounded multi-host concurrency;
 - persistent host failure state;
 - retry/backoff scheduling;
@@ -280,7 +286,8 @@ A reasonable first snapshot target is roughly:
 
 Quality and host diversity matter more than raw count.
 
-Before doing a much larger crawl, implement host-aware scheduling/fairness.
+Basic host/site-group-aware selection and group admission limits are now
+implemented. More sophisticated host pacing and scheduling remain future work.
 
 ### 7. Freeze SQLite correctly
 
@@ -355,21 +362,25 @@ At that point the public can use SmolSearch even though crawling remains an offl
 
 # After the Public POC — MVP Work
 
-## 1. Host-aware crawler scheduling
+## 1. Host-aware crawler pacing and concurrency
 
-This is the next important crawler improvement.
+The current frontier randomly chooses a site group, then a host within that
+group, and takes the oldest pending URL for that host. It also limits new URL
+admission per group. This is a first step toward diversity, but it does not
+schedule host cooldowns, track host health, or run concurrent requests.
 
-Goals:
+Next goals:
 
 ```text
 one active request per host
 configurable host delay
 bounded global concurrency
-fairness between hosts
-one pathological host cannot dominate the frontier
+persistent host readiness/cooldown
+continued fairness between site groups
 ```
 
-The current FIFO-style frontier is good enough to prove persistence but not good enough for a long-running public crawler.
+Do not confuse random selection across groups with enforced per-host
+politeness or retries.
 
 ## 2. Failure tracking and backoff
 
