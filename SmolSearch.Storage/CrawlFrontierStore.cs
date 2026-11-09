@@ -19,35 +19,47 @@ public sealed class CrawlFrontierStore
     {
         ArgumentNullException.ThrowIfNull(uris);
 
+
         const string sql =
             """
             INSERT OR IGNORE INTO crawl_frontier
             (
                 url,
-                discovered_at
+                discovered_at,
+                host,
+                site_group
             )
             SELECT
                 @Url,
-                @DiscoveredAt
+                @DiscoveredAt,
+                @Host,
+                @SiteGroup
             WHERE
                 (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
             """;
+
 
         var discoveredAt = DateTimeOffset.UtcNow.ToString(
             "O",
             CultureInfo.InvariantCulture);
 
+
         var rows = uris.Select(uri =>
         {
             ArgumentNullException.ThrowIfNull(uri);
+
+            var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
 
             return new
             {
                 Url = uri.AbsoluteUri,
                 DiscoveredAt = discoveredAt,
+                Host = host,
+                SiteGroup = siteGroup,
                 MaxEntries = MaxFrontierEntries
             };
         }).ToList();
+
 
         if (rows.Count == 0)
         {
@@ -68,20 +80,26 @@ public sealed class CrawlFrontierStore
     {
         ArgumentNullException.ThrowIfNull(uri);
 
+
         const string sql =
             """
             INSERT OR IGNORE INTO crawl_frontier
             (
                 url,
-                discovered_at
+                discovered_at,
+                host,
+                site_group
             )
             SELECT
                 @Url,
-                @DiscoveredAt
+                @DiscoveredAt,
+                @Host,
+                @SiteGroup
             WHERE
                 (SELECT COUNT(*) FROM crawl_frontier) < @MaxEntries;
             """;
 
+        var (host, siteGroup) = CrawlSiteClassifier.Classify(uri);
         await using var connection = new SqliteConnection(_connectionString);
 
         await connection.ExecuteAsync(
@@ -89,9 +107,9 @@ public sealed class CrawlFrontierStore
             new
             {
                 Url = uri.AbsoluteUri,
-                DiscoveredAt = DateTimeOffset.UtcNow.ToString(
-                    "O",
-                    CultureInfo.InvariantCulture),
+                DiscoveredAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                Host = host,
+                SiteGroup = siteGroup,
                 MaxEntries = MaxFrontierEntries
             });
     }
