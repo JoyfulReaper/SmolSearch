@@ -63,7 +63,8 @@ public sealed class CrawlFrontierStore
                 DiscoveredAt = discoveredAt,
                 Host = host,
                 SiteGroup = siteGroup,
-                MaxEntries = MaxFrontierEntries
+                MaxEntries = MaxFrontierEntries,
+                MaxSiteGroupEntries = MaxSiteGroupEntries
             };
         }).ToList();
 
@@ -123,7 +124,8 @@ public sealed class CrawlFrontierStore
                 DiscoveredAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 Host = host,
                 SiteGroup = siteGroup,
-                MaxEntries = MaxFrontierEntries
+                MaxEntries = MaxFrontierEntries,
+                MaxSiteGroupEntries = MaxSiteGroupEntries
             });
     }
 
