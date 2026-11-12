@@ -58,13 +58,19 @@ public sealed class DocumentStore
 
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(
         string query,
-        int limit = 20)
+        int limit = 20,
+        int offset = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
 
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset));
         }
 
         var ftsQuery = BuildFtsQuery(query);
@@ -79,8 +85,8 @@ public sealed class DocumentStore
             FROM document_fts
             JOIN documents d ON d.id = document_fts.rowid
             WHERE document_fts MATCH @Query
-            ORDER BY Rank
-            LIMIT @Limit;
+            ORDER BY Rank, d.url
+            LIMIT @Limit OFFSET @Offset;
             """;
 
         await using var connection = new SqliteConnection(_connectionString);
@@ -90,7 +96,8 @@ public sealed class DocumentStore
             new
             {
                 Query = ftsQuery,
-                Limit = limit
+                Limit = limit,
+                Offset = offset
             });
 
         return results.AsList();

@@ -9,6 +9,8 @@ namespace SmolSearch.HappyGemini;
 [AutoRegisterGeminiPage]
 public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScopedGeminiPage
 {
+    private const int PageSize = 20;
+    private const string PageQueryPrefix = "__smolsearch_page=";
     private readonly SmolSearchPluginOptions _options = SmolSearchPluginOptions.Load();
     public string Path => "/search";
 
@@ -30,11 +32,12 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
             return;
         }
 
-        var query = Uri.UnescapeDataString(request.Url.Query[1..]);
+        var (query, page) = ParseQueryAndPage(request.Url.Query);
+        var offset = (page - 1) * PageSize;
         var baseUrl = _options.BaseUrl;
 
         var client = httpClientFactory.CreateClient();
-        var url = $"{baseUrl.TrimEnd('/')}/api/search?q={Uri.EscapeDataString(query)}";
+        var url = $"{baseUrl.TrimEnd('/')}/api/search?q={Uri.EscapeDataString(query)}&limit={PageSize + 1}&offset={offset}";
 
         SearchResult[] results;
 
@@ -68,8 +71,16 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
         gemtext.AppendLine();
         gemtext.AppendLine($"## Results for: {displayQuery}");
         gemtext.AppendLine();
+        gemtext.AppendLine($"Page {page}");
+        gemtext.AppendLine();
 
-        foreach (var result in results)
+        if (results.Length == 0)
+        {
+            gemtext.AppendLine("No results found on this page.");
+            gemtext.AppendLine();
+        }
+
+        foreach (var result in results.Take(PageSize))
         {
             var title = string.IsNullOrWhiteSpace(result.Title)
                 ? result.Url
@@ -84,6 +95,18 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
 
             gemtext.AppendLine();
         }
+
+        if (page > 1)
+        {
+            gemtext.AppendLine($"=> {BuildPageUrl(query, page - 1)} Previous page");
+        }
+
+        if (results.Length > PageSize)
+        {
+            gemtext.AppendLine($"=> {BuildPageUrl(query, page + 1)} Next page");
+        }
+
+        gemtext.AppendLine("=> /search New search");
 
         await response.WriteHeaderAsync(
             GeminiStatusCode.Success,
@@ -108,5 +131,37 @@ public sealed class SearchPage(IHttpClientFactory httpClientFactory) : IHostScop
     private static string ToSingleLine(string value)
     {
         return value.Replace('\r', ' ').Replace('\n', ' ');
+    }
+
+    private static (string Query, int Page) ParseQueryAndPage(string rawQuery)
+    {
+        var encodedQuery = rawQuery[1..];
+        const string separator = "&q=";
+
+        if (encodedQuery.StartsWith(PageQueryPrefix, StringComparison.Ordinal))
+        {
+            var separatorIndex = encodedQuery.IndexOf(
+                separator,
+                PageQueryPrefix.Length,
+                StringComparison.Ordinal);
+
+            if (separatorIndex >= 0 &&
+                int.TryParse(encodedQuery.AsSpan(
+                    PageQueryPrefix.Length,
+                    separatorIndex - PageQueryPrefix.Length), out var page) &&
+                page >= 1 &&
+                page <= (int.MaxValue / PageSize) + 1)
+            {
+                var query = Uri.UnescapeDataString(encodedQuery[(separatorIndex + separator.Length)..]);
+                return (query, page);
+            }
+        }
+
+        return (Uri.UnescapeDataString(encodedQuery), 1);
+    }
+
+    private static string BuildPageUrl(string query, int page)
+    {
+        return $"/search?{PageQueryPrefix}{page}&q={Uri.EscapeDataString(query)}";
     }
 }
